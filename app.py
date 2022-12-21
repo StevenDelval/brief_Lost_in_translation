@@ -19,6 +19,10 @@ st.pyplot(fig)
 
 
 df_semaine_type= pd.DataFrame(df[['date',"type_objet",'id']].groupby([pd.Grouper(key='date', freq='W'),"type_objet"]).count().reset_index().set_index("date"))
-objet =st.radio("Choisissez un type d'objet",df_semaine_type["type_objet"].unique())
+mask_objet =st.multiselect("Choisissez un type d'objet",df_semaine_type["type_objet"].unique())
+if st.button("Cree le graphique"):
+    combo_mask = df_semaine_type["type_objet"] == mask_objet[0]
+    for mask in mask_objet:
+        combo_mask |= df_semaine_type["type_objet"] == mask
 
-st.line_chart(df_semaine_type[df_semaine_type["type_objet"]==objet]["id"])
+    st.line_chart(df_semaine_type[combo_mask]["id"])
