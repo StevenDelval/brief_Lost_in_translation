@@ -9,22 +9,21 @@ import json
 engine = db.create_engine("sqlite:///db.sqlite")
 connection = engine.connect()
 
-df = pd.read_sql_table(table_name="LostItem",con=engine)
+df = pd.read_csv("df_table_lositem.csv")
 with open("departements.geojson") as mon_fichier:
     geo = json.load(mon_fichier)
 
-sql=""" 
-SELECT * FROM LostItem
-JOIN Gare ON LostItem.code_uic_gare_origine = Gare.code_uic
-JOIN Frequentation on Frequentation.code_uic = LostItem.code_uic_gare_origine
 
-"""
 
-df_join = pd.read_sql(sql,con=engine)
+df_join = pd.read_csv("df_join.csv")
 df_join['date'] = pd.to_datetime(df_join['date'])
+df_dep_voy = pd.read_csv("df_dep_voy.csv")
+
 
 tab1,tab2,tab3 = st.tabs(["Question n°1","Question n°2","Question n°3"])
-st.markdown("<style>#map_div{width:100%;}</style>",unsafe_allow_html=True)
+
+
+
 
 
 with tab1:
@@ -51,10 +50,28 @@ with tab2:
 with tab3:
 
     df_dep= pd.DataFrame(df_join[['code_departement','type_objet',"date",'departement']].groupby(['code_departement',pd.Grouper(key='date', freq='Y'),'type_objet']).count().reset_index())
-    
+    df_dep.rename(columns = {'departement':'nombre_objet_perdue'}, inplace = True)
     mask_objet =st.selectbox("Choisissez un type d'objet",df_dep["type_objet"].unique(),key='quest3objet')
     mask_date =st.selectbox("Choisissez une annee",df_dep["date"].dt.year.unique(),key='quest3year')
     
+    def chose_year(year):
+        if year == 2016:
+            return "SUM(total_voyageurs_2016)"
+        if year == 2017:
+            return "SUM(total_voyageurs_2017)"
+        if year == 2018:
+            return "SUM(total_voyageurs_2018)"
+        if year == 2019:
+            return "SUM(total_voyageurs_2019)"
+        if year == 2020:
+            return "SUM(total_voyageurs_2020)"
+        if year == 2021:
+            return "SUM(total_voyageurs_2021)"
+
+    
+    new_df=df_dep[(df_dep["date"].dt.year==int(mask_date)) & (df_dep["type_objet"] == mask_objet)]
+    merge = pd.merge(new_df, df_dep_voy,on="code_departement")
+    merge["nombre_objet_perdue"] = round(merge["nombre_objet_perdue"] / (merge[chose_year(mask_date)]/1000000),6)
     
     
     france = folium.Map(location = [46.763656, 2.429795], zoom_start = 5)
@@ -62,13 +79,13 @@ with tab3:
     folium.Choropleth(
         geo_data=geo,
         name="France departements",
-        data=df_dep[(df_dep["date"].dt.year==int(mask_date)) & (df_dep["type_objet"] == mask_objet)],
-        columns=["code_departement","departement"],
+        data=merge,
+        columns=["code_departement","nombre_objet_perdue"],
         key_on="feature.properties.code",
         fill_color="YlGn",
         fill_opacity=0.7,
         line_opacity=.1,
-        legend_name=f"Nombre d'objet de type {mask_objet} perdue en {mask_date}",
+        legend_name=f"Nombre d'objet de type {mask_objet} perdue en {mask_date} par million de voyageurs",
     ).add_to(france)
 
     streamlit_folium.st_folium(france)
